@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProStudio | Perfect Crop</title>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --bg: #0f172a;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: white;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 10px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 450px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(15px);
+            border-radius: 30px;
+            padding: 1.2rem;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        /* Fixed Aspect Ratio Viewport (3:4 Ratio) */
+        .viewport-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 3 / 4; 
+            overflow: hidden;
+            border-radius: 20px;
+            background: #000;
+            border: 3px solid #334155;
+        }
+
+        video, #canvas {
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* This makes the preview look nice */
+            display: block;
+            transform: scaleX(-1); /* Mirror view */
+        }
+
+        /* The canvas result should not be CSS mirrored, data is already flipped */
+        #canvas.result {
+            transform: none;
+            object-fit: contain;
+            height: auto;
+        }
+
+        .scroll-view {
+            max-height: 60vh;
+            overflow-y: auto;
+            border-radius: 20px;
+        }
+
+        #timer {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 8rem;
+            font-weight: 900;
+            z-index: 10;
+        }
+
+        .controls { margin-top: 1.5rem; display: grid; gap: 1rem; }
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        
+        select, button {
+            padding: 14px;
+            border-radius: 12px;
+            border: none;
+            background: #1e293b;
+            color: white;
+            font-weight: 600;
+        }
+
+        .btn-snap { background: var(--primary); font-size: 1.1rem; cursor: pointer; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2 style="text-align: center; letter-spacing: 2px;">PRO STUDIO</h2>
+
+        <div class="scroll-view">
+            <div class="viewport-wrapper">
+                <div id="timer" class="hidden">3</div>
+                <video id="video" autoplay playsinline></video>
+                <canvas id="canvas" class="hidden result"></canvas>
+            </div>
+        </div>
+
+        <div id="ui-setup" class="controls">
+            <div class="btn-grid">
+                <select id="mode">
+                    <option value="1">Single Photo</option>
+                    <option value="3">3-Photo Strip</option>
+                </select>
+                <select id="filter">
+                    <option value="none">Natural</option>
+                    <option value="grayscale(100%)">Noir</option>
+                    <option value="sepia(100%)">Retro</option>
+                    <option value="contrast(1.4)">Vivid</option>
+                </select>
+            </div>
+            <button id="btn-snap" class="btn-snap">📸 Capture</button>
+        </div>
+
+        <div id="ui-post" class="controls hidden">
+            <button onclick="location.reload()" style="background:#475569">🔄 Retake</button>
+            <button id="btn-download" style="background:var(--primary)">💾 Download Strip</button>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const timerEl = document.getElementById('timer');
+        const snapBtn = document.getElementById('btn-snap');
+        
+        let images = [];
+
+        async function init() {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: 'user', width: 1280, height: 720 } 
+            });
+            video.srcObject = stream;
+        }
+
+        snapBtn.onclick = async () => {
+            const count = parseInt(document.getElementById('mode').value);
+            images = [];
+            snapBtn.disabled = true;
+
+            for (let i = 0; i < count; i++) {
+                timerEl.classList.remove('hidden');
+                for (let t = 3; t > 0; t--) {
+                    timerEl.innerText = t;
+                    await new Promise(r => setTimeout(r, 800));
+                }
+                timerEl.classList.add('hidden');
+
+                // WYSIWYG CROP LOGIC
+                const temp = document.createElement('canvas');
+                // We force a 3:4 aspect ratio for the saved image to match the preview box
+                temp.width = 600;
+                temp.height = 800; 
+                const tCtx = temp.getContext('2d');
+
+                // 1. Mirror the context
+                tCtx.translate(temp.width, 0);
+                tCtx.scale(-1, 1);
+
+                // 2. Calculate crop to match 'object-fit: cover'
+                const videoAspect = video.videoWidth / video.videoHeight;
+                const targetAspect = temp.width / temp.height;
+                let sx, sy, sw, sh;
+
+                if (videoAspect > targetAspect) {
+                    sh = video.videoHeight;
+                    sw = sh * targetAspect;
+                    sx = (video.videoWidth - sw) / 2;
+                    sy = 0;
+                } else {
+                    sw = video.videoWidth;
+                    sh = sw / targetAspect;
+                    sx = 0;
+                    sy = (video.videoHeight - sh) / 2;
+                }
+
+                tCtx.filter = document.getElementById('filter').value;
+                tCtx.drawImage(video, sx, sy, sw, sh, 0, 0, temp.width, temp.height);
+                
+                images.push(temp.toDataURL('image/png'));
+                if (i < count - 1) await new Promise(r => setTimeout(r, 1000));
+            }
+            renderStrip();
+        };
+
+        function renderStrip() {
+            const w = 600; const h = 800; const pad = 40;
+            canvas.width = w + (pad * 2);
+            canvas.height = (h * images.length) + (pad * (images.length + 1)) + 100;
+
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            images.forEach((imgSrc, i) => {
+                const img = new Image();
+                img.onload = () => {
+                    ctx.drawImage(img, pad, pad + (i * (h + pad)), w, h);
+                    if (i === images.length - 1) {
+                        ctx.fillStyle = "#aaa";
+                        ctx.font = "bold 20px Inter";
+                        ctx.textAlign = "center";
+                        ctx.fillText("PRO STUDIO SESSION", canvas.width/2, canvas.height - 40);
+                        
+                        video.classList.add('hidden');
+                        canvas.classList.remove('hidden');
+                        document.getElementById('ui-setup').classList.add('hidden');
+                        document.getElementById('ui-post').classList.remove('hidden');
+                    }
+                };
+                img.src = imgSrc;
+            });
+        }
+
+        document.getElementById('btn-download').onclick = () => {
+            const link = document.createElement('a');
+            link.download = 'photostrip.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        };
+
+        document.getElementById('filter').onchange = (e) => {
+            video.style.filter = e.target.value;
+        };
+
+        init();
+    </script>
+</body>
+</html>
+
