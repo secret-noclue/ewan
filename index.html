@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ProStudio | Perfect Crop</title>
+    <title>ProStudio | Ultimate WYSIWYG</title>
     <style>
         :root {
             --primary: #6366f1;
             --bg: #0f172a;
+            --glass: rgba(255, 255, 255, 0.05);
         }
 
         body {
@@ -19,50 +20,63 @@
             flex-direction: column;
             align-items: center;
             min-height: 100vh;
-            padding: 10px;
+            padding: 15px;
         }
 
         .container {
             width: 100%;
-            max-width: 450px;
-            background: rgba(255, 255, 255, 0.05);
+            max-width: 480px;
+            background: var(--glass);
             backdrop-filter: blur(15px);
-            border-radius: 30px;
-            padding: 1.2rem;
+            border-radius: 28px;
+            padding: 1.5rem;
             border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
         }
 
-        /* Fixed Aspect Ratio Viewport (3:4 Ratio) */
-        .viewport-wrapper {
+        /* Fixed 3:4 Aspect Ratio Viewport */
+        .viewport-container {
             position: relative;
             width: 100%;
             aspect-ratio: 3 / 4; 
-            overflow: hidden;
+            overflow-y: auto; /* For scrollable strip preview */
             border-radius: 20px;
             background: #000;
-            border: 3px solid #334155;
+            border: 2px solid #334155;
         }
 
-        video, #canvas {
+        video {
             width: 100%;
             height: 100%;
-            object-fit: cover; /* This makes the preview look nice */
-            display: block;
+            object-fit: cover; /* This creates the "zoom/fill" look */
             transform: scaleX(-1); /* Mirror view */
+            display: block;
         }
 
-        /* The canvas result should not be CSS mirrored, data is already flipped */
-        #canvas.result {
-            transform: none;
-            object-fit: contain;
-            height: auto;
+        #canvas {
+            width: 100%;
+            display: block;
+            /* No CSS mirror here because logic is baked into the pixels */
         }
 
-        .scroll-view {
-            max-height: 60vh;
-            overflow-y: auto;
-            border-radius: 20px;
+        /* HUD & UI Elements */
+        #filter-hud {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.6);
+            padding: 8px 16px;
+            border-radius: 30px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            z-index: 20;
+            opacity: 0;
+            transition: 0.3s;
         }
+
+        #filter-hud.show { opacity: 1; }
 
         #timer {
             position: absolute;
@@ -71,12 +85,14 @@
             transform: translate(-50%, -50%);
             font-size: 8rem;
             font-weight: 900;
-            z-index: 10;
+            z-index: 30;
+            text-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
 
         .controls { margin-top: 1.5rem; display: grid; gap: 1rem; }
-        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
         select, button {
             padding: 14px;
             border-radius: 12px;
@@ -84,44 +100,53 @@
             background: #1e293b;
             color: white;
             font-weight: 600;
+            cursor: pointer;
         }
 
-        .btn-snap { background: var(--primary); font-size: 1.1rem; cursor: pointer; }
+        .btn-capture { background: var(--primary); font-size: 1.1rem; }
         .hidden { display: none !important; }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <h2 style="text-align: center; letter-spacing: 2px;">PRO STUDIO</h2>
+        <header style="text-align: center; margin-bottom: 1rem;">
+            <h2 style="margin:0; letter-spacing: 2px; color: #818cf8;">PRO STUDIO</h2>
+        </header>
 
-        <div class="scroll-view">
-            <div class="viewport-wrapper">
-                <div id="timer" class="hidden">3</div>
-                <video id="video" autoplay playsinline></video>
-                <canvas id="canvas" class="hidden result"></canvas>
-            </div>
+        <div class="viewport-container" id="viewport">
+            <div id="filter-hud">Normal</div>
+            <div id="timer" class="hidden">3</div>
+            <video id="video" autoplay playsinline></video>
+            <canvas id="canvas" class="hidden"></canvas>
         </div>
 
         <div id="ui-setup" class="controls">
             <div class="btn-grid">
                 <select id="mode">
                     <option value="1">Single Photo</option>
-                    <option value="3">3-Photo Strip</option>
+                    <option value="3">Classic 3-Strip</option>
+                    <option value="4">Quad Grid</option>
                 </select>
                 <select id="filter">
                     <option value="none">Natural</option>
-                    <option value="grayscale(100%)">Noir</option>
+                    <option value="grayscale(100%)">Noir (B&W)</option>
                     <option value="sepia(100%)">Retro</option>
-                    <option value="contrast(1.4)">Vivid</option>
+                    <option value="saturate(2.5)">Vivid</option>
+                    <option value="contrast(1.5) brightness(0.9)">Dramatic</option>
+                    <option value="hue-rotate(180deg)">Infrared</option>
+                    <option value="invert(1)">X-Ray</option>
                 </select>
             </div>
-            <button id="btn-snap" class="btn-snap">📸 Capture</button>
+            <button id="btn-snap" class="btn-capture">📸 Take Photo</button>
         </div>
 
         <div id="ui-post" class="controls hidden">
-            <button onclick="location.reload()" style="background:#475569">🔄 Retake</button>
-            <button id="btn-download" style="background:var(--primary)">💾 Download Strip</button>
+            <button id="btn-share" style="background: #10b981;">📤 Send to Email / Photos</button>
+            <div class="btn-grid">
+                <button onclick="location.reload()" style="background:#475569">🔄 Retake</button>
+                <button id="btn-download" style="background:var(--primary)">💾 Save</button>
+            </div>
         </div>
     </div>
 
@@ -130,6 +155,8 @@
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const timerEl = document.getElementById('timer');
+        const hudEl = document.getElementById('filter-hud');
+        const filterSelect = document.getElementById('filter');
         const snapBtn = document.getElementById('btn-snap');
         
         let images = [];
@@ -140,6 +167,14 @@
             });
             video.srcObject = stream;
         }
+
+        // HUD Notification
+        filterSelect.onchange = (e) => {
+            video.style.filter = e.target.value;
+            hudEl.innerText = e.target.options[e.target.selectedIndex].text;
+            hudEl.classList.add('show');
+            setTimeout(() => hudEl.classList.remove('show'), 1200);
+        };
 
         snapBtn.onclick = async () => {
             const count = parseInt(document.getElementById('mode').value);
@@ -154,18 +189,17 @@
                 }
                 timerEl.classList.add('hidden');
 
-                // WYSIWYG CROP LOGIC
+                // --- WYSIWYG CROP LOGIC ---
                 const temp = document.createElement('canvas');
-                // We force a 3:4 aspect ratio for the saved image to match the preview box
-                temp.width = 600;
-                temp.height = 800; 
+                temp.width = 600;  // High res 3:4 width
+                temp.height = 800; // High res 3:4 height
                 const tCtx = temp.getContext('2d');
 
-                // 1. Mirror the context
+                // 1. Physical Mirror
                 tCtx.translate(temp.width, 0);
                 tCtx.scale(-1, 1);
 
-                // 2. Calculate crop to match 'object-fit: cover'
+                // 2. Math to match 'object-fit: cover'
                 const videoAspect = video.videoWidth / video.videoHeight;
                 const targetAspect = temp.width / temp.height;
                 let sx, sy, sw, sh;
@@ -182,10 +216,10 @@
                     sy = (video.videoHeight - sh) / 2;
                 }
 
-                tCtx.filter = document.getElementById('filter').value;
+                tCtx.filter = filterSelect.value;
                 tCtx.drawImage(video, sx, sy, sw, sh, 0, 0, temp.width, temp.height);
-                
                 images.push(temp.toDataURL('image/png'));
+                
                 if (i < count - 1) await new Promise(r => setTimeout(r, 1000));
             }
             renderStrip();
@@ -203,35 +237,44 @@
                 const img = new Image();
                 img.onload = () => {
                     ctx.drawImage(img, pad, pad + (i * (h + pad)), w, h);
-                    if (i === images.length - 1) {
-                        ctx.fillStyle = "#aaa";
-                        ctx.font = "bold 20px Inter";
-                        ctx.textAlign = "center";
-                        ctx.fillText("PRO STUDIO SESSION", canvas.width/2, canvas.height - 40);
-                        
-                        video.classList.add('hidden');
-                        canvas.classList.remove('hidden');
-                        document.getElementById('ui-setup').classList.add('hidden');
-                        document.getElementById('ui-post').classList.remove('hidden');
-                    }
+                    if (i === images.length - 1) finalize();
                 };
                 img.src = imgSrc;
             });
         }
 
-        document.getElementById('btn-download').onclick = () => {
-            const link = document.createElement('a');
-            link.download = 'photostrip.png';
-            link.href = canvas.toDataURL();
-            link.click();
+        function finalize() {
+            ctx.fillStyle = "#cbd5e1";
+            ctx.font = "bold 22px Inter";
+            ctx.textAlign = "center";
+            ctx.fillText("PRO STUDIO SESSION", canvas.width/2, canvas.height - 35);
+
+            video.classList.add('hidden');
+            canvas.classList.remove('hidden');
+            document.getElementById('ui-setup').classList.add('hidden');
+            document.getElementById('ui-post').classList.remove('hidden');
+            document.getElementById('viewport').style.overflowY = "auto";
+        }
+
+        // Sharing Logic
+        document.getElementById('btn-share').onclick = async () => {
+            const blob = await (await fetch(canvas.toDataURL())).blob();
+            const file = new File([blob], 'strip.png', { type: 'image/png' });
+            if (navigator.share) {
+                navigator.share({ files: [file], title: 'My Pro Strip' });
+            } else {
+                window.location.href = `mailto:?subject=Photo Strip&body=Check this out!`;
+            }
         };
 
-        document.getElementById('filter').onchange = (e) => {
-            video.style.filter = e.target.value;
+        document.getElementById('btn-download').onclick = () => {
+            const link = document.createElement('a');
+            link.download = 'pro-studio-strip.png';
+            link.href = canvas.toDataURL();
+            link.click();
         };
 
         init();
     </script>
 </body>
 </html>
-
